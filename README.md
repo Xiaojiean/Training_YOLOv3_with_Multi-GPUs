@@ -2,9 +2,9 @@
 Training [PyTorch-YOLOv3](https://github.com/eriklindernoren/PyTorch-YOLOv3) with multi-GPUs.
 ## Installation
 ##### Clone and install requirements
-    $ git clone https://github.com/eriklindernoren/PyTorch-YOLOv3
-    $ cd PyTorch-YOLOv3/
-    $ sudo pip3 install -r requirements.txt
+    $ git clone https://github.com/zhangyongshun/Training_YOLOv3_with_Multi-GPUs.git
+    $ cd Training_YOLOv3_with_Multi-GPUs/
+    $ sudo pip install -r requirements.txt
 
 ##### Download pretrained weights
     $ cd weights/
