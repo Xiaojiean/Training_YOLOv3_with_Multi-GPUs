@@ -9,7 +9,7 @@ from utils.utils import *
 from utils.datasets import *
 from utils.parse_config import *
 import config.config as cfg
-
+from torch.optim import lr_scheduler
 from terminaltables import AsciiTable
 
 import os
@@ -109,6 +109,7 @@ if __name__ == "__main__":
             model.load_darknet_weights(opt.pretrained_weights)
 
 
+
     model = nn.DataParallel(model)
 
 
@@ -122,7 +123,8 @@ if __name__ == "__main__":
         pin_memory=True,
         collate_fn=dataset.collate_fn,
     )
-    optimizer = torch.optim.Adam(model.parameters(), lr=opt.base_lr, weight_decay=opt.weight_decay)
+    optimizer = torch.optim.SGD(model.parameters(), lr=opt.base_lr, weight_decay=opt.weight_decay, momentum=0.9, nesterov=True)
+    scheduler = lr_scheduler.MultiStepLR(optimizer, milestones=[round(cfg.epochs * x) for x in [0.8, 0.9]], gamma=0.1)
 
     metrics = [
         "grid_size",
@@ -140,11 +142,13 @@ if __name__ == "__main__":
         "conf_obj",
         "conf_noobj",
     ]
-
+    warm_up_batchs = cfg.warmup
+    wp_batch_cnt = 0
     for epoch in range(opt.epochs):
         model.train()
         start_time = time.time()
         end_train = 0
+
         for batch_i, (_, imgs, targets) in enumerate(dataloader):
             if batch_i == len(dataloader)-1:
                 break
@@ -153,6 +157,17 @@ if __name__ == "__main__":
             targets = Variable(targets.to(device), requires_grad=False)
             loss, outputs = model(imgs, targets)
             loss.mean().backward()
+
+            if int(wp_batch_cnt / opt.gradient_accumulations) < warm_up_batchs:
+                wp_batch_cnt += 1
+                alpha = float(wp_batch_cnt) / warm_up_batchs
+                warmup_factor = 1./3 * (1 - alpha) + alpha
+                lr=cfg.base_lr*warmup_factor
+                if  (wp_batch_cnt+1)%10==0:
+                    print('warm up lr: ')
+                    print(lr)
+                for param_group in optimizer.param_groups:
+                    param_group['lr'] = lr
 
             if batches_done % opt.gradient_accumulations:
                 # Accumulates gradient before each step
@@ -193,7 +208,8 @@ if __name__ == "__main__":
                 print(log_str)
 
             model.module.seen += imgs.size(0)
-
+        if wp_batch_cnt>warm_up_batchs:
+            scheduler.step()
         #print('Epoch:{}, training time (m): {}, validation time (m): {}'.format(epoch, (end_train-start_time)/60, 0))
         end_train = time.time()
         if epoch % opt.evaluation_interval == 0:
@@ -203,7 +219,7 @@ if __name__ == "__main__":
                 model,
                 path=valid_path,
                 iou_thres=0.5,
-                conf_thres=0.5,
+                conf_thres=0.01,
                 nms_thres=0.5,
                 img_size=opt.img_size,
                 batch_size=20,
