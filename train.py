@@ -158,12 +158,12 @@ if __name__ == "__main__":
             loss, outputs = model(imgs, targets)
             loss.mean().backward()
 
-            if int(wp_batch_cnt / opt.gradient_accumulations) < warm_up_batchs:
+            if wp_batch_cnt < int(warm_up_batchs*opt.gradient_accumulations):
                 wp_batch_cnt += 1
-                alpha = float(wp_batch_cnt) / warm_up_batchs
+                alpha = float(wp_batch_cnt) / int(warm_up_batchs*opt.gradient_accumulations)
                 warmup_factor = 1./3 * (1 - alpha) + alpha
                 lr=cfg.base_lr*warmup_factor
-                if  (wp_batch_cnt+1)%10==0:
+                if  (wp_batch_cnt+1)%100==0:
                     print('warm up lr: ')
                     print(lr)
                 for param_group in optimizer.param_groups:
@@ -208,7 +208,7 @@ if __name__ == "__main__":
                 print(log_str)
 
             model.module.seen += imgs.size(0)
-        if wp_batch_cnt>warm_up_batchs:
+        if wp_batch_cnt>=int(warm_up_batchs*opt.gradient_accumulations):
             scheduler.step()
         #print('Epoch:{}, training time (m): {}, validation time (m): {}'.format(epoch, (end_train-start_time)/60, 0))
         end_train = time.time()
